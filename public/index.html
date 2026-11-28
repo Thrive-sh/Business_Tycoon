@@ -1425,7 +1425,7 @@
               </div>
             </div>
             <div class="portfolio-card__metric portfolio-card__metric--yield">
-              <span class="portfolio-card__label">Perkiraan imbal hasil per jam</span>
+              <span class="portfolio-card__label" id="cat-portfolio-yield-label">Perkiraan imbal hasil per jam</span>
               <strong class="portfolio-card__yield" id="cat-portfolio-yield">$0.00</strong>
             </div>
           </div>
@@ -1459,31 +1459,6 @@
 
     <!-- ==================== LAYAR DETAIL ASET INVESTASI ==================== -->
     <section class="screen" id="asset-detail-screen" aria-label="Detail Aset Investasi" hidden>
-      <header class="detail-header">
-        <button
-          type="button"
-          class="detail-back-btn"
-          id="asset-detail-back-btn"
-          aria-label="Kembali ke daftar investasi"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <use href="#icon-arrow-left"></use>
-          </svg>
-        </button>
-        <div class="detail-header__spacer"></div>
-        <button
-          type="button"
-          class="detail-star-btn"
-          id="detail-watchlist-btn"
-          aria-label="Tandai aset favorit"
-          aria-pressed="false"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <use href="#icon-star"></use>
-          </svg>
-        </button>
-      </header>
-
       <div class="detail-body" id="detail-body">
         <div class="detail-hero">
           <div class="detail-hero__identity">
@@ -1498,14 +1473,14 @@
           </div>
           <div class="detail-hero__price-col">
             <div class="detail-hero__price-line">
-              <span class="detail-hero__session-tag">Pasar</span>
+              <span class="detail-hero__session-tag" id="detail-session-tag">Pasar</span>
               <strong class="detail-price-box__current" id="detail-market-price-hero">$0.00</strong>
             </div>
             <div class="detail-price-box__change pnl--positive" id="detail-price-change">▲ $0.00 (+0,00%)</div>
           </div>
         </div>
 
-        <div class="detail-meta-strip">
+        <div class="detail-meta-strip" id="detail-meta-strip">
           <div class="detail-meta-strip__left">
             <span class="detail-meta-strip__label">Harga Awal</span>
             <span class="detail-meta-strip__dot" aria-hidden="true">&middot;</span>
@@ -1523,10 +1498,28 @@
             aria-expanded="false"
             aria-controls="detail-stats-extra"
           >
-            <span class="detail-stats-drawer__summary">
-              <span>Buka: <strong id="detail-stat-open">$0.00</strong></span>
+            <span class="detail-stats-drawer__summary" id="detail-stats-summary">
+              <span id="detail-stat-open-wrap">Buka: <strong id="detail-stat-open">$0.00</strong></span>
               <span>Tertinggi: <strong id="detail-stat-high">$0.00</strong></span>
               <span>Terendah: <strong id="detail-stat-low">$0.00</strong></span>
+            </span>
+            <span class="detail-stats-drawer__grid24" id="detail-stats-grid24" hidden>
+              <span class="detail-stats-drawer__item">
+                <span class="detail-stats-drawer__k">Tertinggi 24j</span>
+                <strong class="detail-stats-drawer__v" id="detail-stat-24-high">$0.00</strong>
+              </span>
+              <span class="detail-stats-drawer__item">
+                <span class="detail-stats-drawer__k">Terendah 24j</span>
+                <strong class="detail-stats-drawer__v" id="detail-stat-24-low">$0.00</strong>
+              </span>
+              <span class="detail-stats-drawer__item">
+                <span class="detail-stats-drawer__k">Volatilitas</span>
+                <strong class="detail-stats-drawer__v" id="detail-stat-24-vol">0,00%</strong>
+              </span>
+              <span class="detail-stats-drawer__item">
+                <span class="detail-stats-drawer__k" id="detail-stat-24-extra-label">Harga Dasar</span>
+                <strong class="detail-stats-drawer__v" id="detail-stat-24-extra-val">$0.00</strong>
+              </span>
             </span>
             <span class="detail-stats-drawer__chevron" aria-hidden="true">
               <svg viewBox="0 0 24 24">
@@ -1543,7 +1536,7 @@
               <span class="detail-stats-drawer__k">Terendah Sesi</span>
               <strong class="detail-stats-drawer__v" id="detail-stat-session-low">$0.00</strong>
             </div>
-            <div class="detail-stats-drawer__item">
+            <div class="detail-stats-drawer__item" id="detail-stat-drawer-yield-item">
               <span class="detail-stats-drawer__k">Dividen / Jam</span>
               <strong class="detail-stats-drawer__v" id="detail-stat-yield-rate">0,00%</strong>
             </div>
@@ -1591,6 +1584,10 @@
         <div class="detail-chart-card" id="detail-chart-card">
           <div class="detail-chart-tooltip" id="detail-chart-tooltip" hidden></div>
           <canvas id="asset-price-canvas" class="detail-chart-canvas" aria-label="Grafik riwayat harga aset"></canvas>
+        </div>
+
+        <div class="detail-trade-actions" id="detail-trade-card">
+          <button type="button" class="trade-btn trade-btn--buy" id="detail-buy-btn">Beli</button>
         </div>
 
         <div class="detail-subtabs" role="tablist" aria-label="Detail informasi aset">
@@ -1665,14 +1662,18 @@
                 <dd id="detail-stat-tab-symbol">NVDA</dd>
               </div>
               <div class="detail-stats-list__row">
-                <dt>Harga pembukaan dasar</dt>
+                <dt>Satuan transaksi</dt>
+                <dd id="detail-stat-tab-unit">lembar</dd>
+              </div>
+              <div class="detail-stats-list__row">
+                <dt id="detail-stat-initial-label">Harga pembukaan dasar</dt>
                 <dd id="detail-stat-tab-initial">$0.00</dd>
               </div>
               <div class="detail-stats-list__row">
                 <dt>Tingkat volatilitas</dt>
                 <dd id="detail-stat-tab-volatility">0,00%</dd>
               </div>
-              <div class="detail-stats-list__row">
+              <div class="detail-stats-list__row" id="detail-stat-yield-row">
                 <dt>Imbal hasil pasif</dt>
                 <dd id="detail-stat-tab-yield">0,00%/jam</dd>
               </div>
@@ -1680,22 +1681,6 @@
           </div>
         </div>
       </div>
-
-      <footer class="detail-trade-dock" id="detail-trade-card">
-        <div class="detail-trade-dock__top">
-          <div class="detail-qty-row" role="group" aria-label="Pilih jumlah unit transaksi">
-            <button type="button" class="qty-chip qty-chip--active" data-trade-qty="1" aria-pressed="true">1</button>
-            <button type="button" class="qty-chip" data-trade-qty="10" aria-pressed="false">10</button>
-            <button type="button" class="qty-chip" data-trade-qty="100" aria-pressed="false">100</button>
-            <button type="button" class="qty-chip" data-trade-qty="max" aria-pressed="false">Maks</button>
-          </div>
-          <div class="detail-trade-notice" id="detail-trade-notice" aria-live="polite"></div>
-        </div>
-        <div class="detail-trade-actions">
-          <button type="button" class="trade-btn trade-btn--sell" id="detail-sell-btn" disabled>Jual</button>
-          <button type="button" class="trade-btn trade-btn--buy" id="detail-buy-btn">Beli</button>
-        </div>
-      </footer>
     </section>
     <!-- ==================== DASHBOARD USAHA ==================== -->
     <section class="screen business-screen" id="business-screen" aria-label="Dashboard Usaha" hidden>

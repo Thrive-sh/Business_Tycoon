@@ -21,6 +21,15 @@ import {
   formatTimeHHMM
 } from '../../utils/format.js';
 import {
+  isCryptoOrForexCategory,
+  calculateAssetHourlyYield,
+  calculateTotalInvestmentYield,
+  calculateCategoryValuation,
+  calculateLivePortfolioSnapshot,
+  buildContinuousMarketProfile,
+  computeContinuousMarketMetrics
+} from './crypto-forex.js';
+import {
   renderDetailPriceChart,
   cancelDetailChartAnimation,
   resetDetailChartState,
@@ -58,6 +67,7 @@ const catPortfolioTitle = getEl('cat-portfolio-title');
 const catPortfolioLabel = getEl('cat-portfolio-label');
 const catPortfolioValue = getEl('cat-portfolio-value');
 const catPortfolioPnl = getEl('cat-portfolio-pnl');
+const catPortfolioYieldLabel = getEl('cat-portfolio-yield-label');
 const catPortfolioYield = getEl('cat-portfolio-yield');
 const ownedBody = getEl('owned-body');
 const ownedListTrack = getEl('owned-list-track');
@@ -78,25 +88,34 @@ const catCardShareForex = getEl('cat-card-share-Forex');
 const shelfTrackSaham = getEl('shelf-track-Saham');
 const shelfTrackKripto = getEl('shelf-track-Kripto');
 const shelfTrackForex = getEl('shelf-track-Forex');
-const assetDetailBackBtn = getEl('asset-detail-back-btn');
-const detailWatchlistBtn = getEl('detail-watchlist-btn');
 const detailAssetAvatar = getEl('detail-asset-avatar');
 const detailAssetSymbol = getEl('detail-asset-symbol');
 const detailAssetName = getEl('detail-asset-name');
 const detailAssetCategory = getEl('detail-asset-category');
 const detailWalletBalance = getEl('detail-wallet-balance');
 const detailMarketPriceHero = getEl('detail-market-price-hero');
+const detailSessionTag = getEl('detail-session-tag');
 const detailPriceChange = getEl('detail-price-change');
+const detailMetaStrip = getEl('detail-meta-strip');
 const detailOpenRef = getEl('detail-open-ref');
 const detailSessionDelta = getEl('detail-session-delta');
 const detailLastUpdate = getEl('detail-last-update');
 const detailStatsToggle = getEl('detail-stats-toggle');
+const detailStatsSummary = getEl('detail-stats-summary');
+const detailStatsGrid24 = getEl('detail-stats-grid24');
+const detailStatOpenWrap = getEl('detail-stat-open-wrap');
 const detailStatsExtra = getEl('detail-stats-extra');
 const detailStatOpen = getEl('detail-stat-open');
 const detailStatHigh = getEl('detail-stat-high');
 const detailStatLow = getEl('detail-stat-low');
+const detailStat24High = getEl('detail-stat-24-high');
+const detailStat24Low = getEl('detail-stat-24-low');
+const detailStat24Vol = getEl('detail-stat-24-vol');
+const detailStat24ExtraLabel = getEl('detail-stat-24-extra-label');
+const detailStat24ExtraVal = getEl('detail-stat-24-extra-val');
 const detailStatSessionHigh = getEl('detail-stat-session-high');
 const detailStatSessionLow = getEl('detail-stat-session-low');
+const detailStatDrawerYieldItem = getEl('detail-stat-drawer-yield-item');
 const detailStatYieldRate = getEl('detail-stat-yield-rate');
 const detailStatVolatility = getEl('detail-stat-volatility');
 const detailTimeframeBtns = hasDOM ? Array.from(document.querySelectorAll('[data-timeframe]')) : [];
@@ -112,8 +131,11 @@ const detailSummaryValue = getEl('detail-summary-value');
 const detailSummaryPnl = getEl('detail-summary-pnl');
 const detailStatTabCategory = getEl('detail-stat-tab-category');
 const detailStatTabSymbol = getEl('detail-stat-tab-symbol');
+const detailStatTabUnit = getEl('detail-stat-tab-unit');
+const detailStatInitialLabel = getEl('detail-stat-initial-label');
 const detailStatTabInitial = getEl('detail-stat-tab-initial');
 const detailStatTabVolatility = getEl('detail-stat-tab-volatility');
+const detailStatYieldRow = getEl('detail-stat-yield-row');
 const detailStatTabYield = getEl('detail-stat-tab-yield');
 const detailOwnedUnits = getEl('detail-owned-units');
 const detailMarketPrice = getEl('detail-market-price');
@@ -123,9 +145,6 @@ const detailTotalCost = getEl('detail-total-cost');
 const detailUnrealizedPnl = getEl('detail-unrealized-pnl');
 const detailYieldRow = getEl('detail-yield-row');
 const detailHourlyYield = getEl('detail-hourly-yield');
-const detailQtyChips = hasDOM ? Array.from(document.querySelectorAll('[data-trade-qty]')) : [];
-const detailTradeNotice = getEl('detail-trade-notice');
-const detailSellBtn = getEl('detail-sell-btn');
 const detailBuyBtn = getEl('detail-buy-btn');
 const roadmapModal = getEl('roadmap-modal');
 const resetModal = getEl('reset-modal');
@@ -172,21 +191,10 @@ export function initMarketData() {
 }
 
 /**
- * Menghitung total estimasi pendapatan per jam dari seluruh aset berimbal hasil (Saham & Properti).
+ * Menghitung total estimasi pendapatan per jam dari seluruh aset berimbal hasil (Saham & Properti; Kripto/Forex = 0).
  */
 export function getTotalInvestmentHourlyYield() {
-  let total = 0;
-  ASSETS.forEach(function (asset) {
-    if (asset.yieldRate <= 0) return;
-    const holding = state.holdings[asset.id];
-    const units = holding && Number.isFinite(Number(holding.units)) ? Number(holding.units) : 0;
-    if (units <= 0) return;
-    const val = units * getCurrentAssetPrice(asset.id) * asset.yieldRate;
-    if (Number.isFinite(val) && val > 0) {
-      total += val;
-    }
-  });
-  return Number.isFinite(total) ? total : 0;
+  return calculateTotalInvestmentYield(ASSETS, state.holdings, getCurrentAssetPrice);
 }
 
 /**
@@ -246,46 +254,10 @@ export function getAssetChangePercent(assetId) {
 
 /**
  * Menghitung ringkasan nilai portofolio, P&L, dan pendapatan/jam untuk satu kategori.
+ * Aset Kripto dan Forex selalu memiliki hourlyYield = 0.
  */
 export function getCategorySummary(category) {
-  let totalValue = 0;
-  let totalCost = 0;
-  let hourlyYield = 0;
-
-  ASSETS.forEach(function (asset) {
-    if (asset.category !== category) return;
-    const holding = state.holdings[asset.id];
-    const units = holding && Number.isFinite(Number(holding.units)) ? Number(holding.units) : 0;
-    const avgEntry =
-      holding && Number.isFinite(Number(holding.avgEntry)) ? Number(holding.avgEntry) : 0;
-    if (units <= 0) return;
-
-    const marketPrice = getCurrentAssetPrice(asset.id);
-    const positionValue = units * marketPrice;
-    const positionCost = units * avgEntry;
-
-    if (Number.isFinite(positionValue)) {
-      totalValue += positionValue;
-    }
-    if (Number.isFinite(positionCost)) {
-      totalCost += positionCost;
-    }
-    if (asset.yieldRate > 0 && Number.isFinite(positionValue)) {
-      hourlyYield += positionValue * asset.yieldRate;
-    }
-  });
-
-  const pnlValue = totalCost > 0 ? totalValue - totalCost : 0;
-  const rawPct = totalCost > 0 ? (pnlValue / totalCost) * 100 : 0;
-  const pnlPct = Number.isFinite(rawPct) ? rawPct : 0;
-
-  return {
-    totalValue: Number.isFinite(totalValue) ? totalValue : 0,
-    totalCost: Number.isFinite(totalCost) ? totalCost : 0,
-    pnlValue: Number.isFinite(pnlValue) ? pnlValue : 0,
-    pnlPct: pnlPct,
-    hourlyYield: Number.isFinite(hourlyYield) ? hourlyYield : 0
-  };
+  return calculateCategoryValuation(category, ASSETS, state.holdings, getCurrentAssetPrice);
 }
 
 const INVEST_CATEGORIES = ['Saham', 'Kripto', 'Forex'];
@@ -352,59 +324,16 @@ let activeLegendCategory = null;
 let hoveredLegendCategory = null;
 
 /**
- * Menghitung ringkasan portofolio lintas 4 kelas aset (nilai, P&L, alokasi,
- * kelas aktif, dan kelas terbesar) dari kepemilikan pemain yang asli.
+ * Menghitung ringkasan portofolio lintas kelas aset secara real-time (nilai, P&L,
+ * alokasi, kelas aktif, dan kelas terbesar) dari kepemilikan pemain yang asli.
  */
 export function getPortfolioAllocation() {
-  const byCategory = {};
-  let total = 0;
-  let pnlValue = 0;
-  let totalCost = 0;
-
-  INVEST_CATEGORIES.forEach(function (cat) {
-    const summary = getCategorySummary(cat);
-    byCategory[cat] = summary;
-    total += summary.totalValue;
-    pnlValue += summary.pnlValue;
-    totalCost += summary.totalCost;
-  });
-
-  let openPositions = 0;
-  ASSETS.forEach(function (asset) {
-    const holding = state.holdings[asset.id];
-    const units = holding && Number.isFinite(Number(holding.units)) ? Number(holding.units) : 0;
-    if (units > 0) {
-      openPositions += 1;
-    }
-  });
-
-  let classes = 0;
-  let top = null;
-  let topValue = 0;
-  INVEST_CATEGORIES.forEach(function (cat) {
-    const value = byCategory[cat].totalValue;
-    if (value > 0) {
-      classes += 1;
-      if (value > topValue) {
-        top = cat;
-        topValue = value;
-      }
-    }
-  });
-
-  const topShare = total > 0 && top ? (topValue / total) * 100 : 0;
-  const rawPnlPct = totalCost > 0 ? (pnlValue / totalCost) * 100 : 0;
-
-  return {
-    byCategory: byCategory,
-    total: Number.isFinite(total) ? total : 0,
-    pnlValue: Number.isFinite(pnlValue) ? pnlValue : 0,
-    pnlPct: Number.isFinite(rawPnlPct) ? rawPnlPct : 0,
-    classes: classes,
-    top: top,
-    topShare: Number.isFinite(topShare) ? topShare : 0,
-    openPositions: openPositions
-  };
+  return calculateLivePortfolioSnapshot(
+    INVEST_CATEGORIES,
+    ASSETS,
+    state.holdings,
+    getCurrentAssetPrice
+  );
 }
 
 /**
@@ -893,8 +822,14 @@ function updateCategoryPortfolioCard(allocation) {
     catPortfolioPnl.classList.toggle('pnl--positive', isPositive);
     catPortfolioPnl.classList.toggle('pnl--negative', !isPositive);
   }
-  if (catPortfolioYield) {
-    catPortfolioYield.textContent = formatUsdFull(summary.hourlyYield);
+  if (catPortfolioYieldLabel && catPortfolioYield) {
+    if (isCryptoOrForexCategory(activeCategoryScreen)) {
+      catPortfolioYieldLabel.textContent = 'Modal diinvestasikan';
+      catPortfolioYield.textContent = formatUsdFull(summary.totalCost);
+    } else {
+      catPortfolioYieldLabel.textContent = 'Perkiraan imbal hasil per jam';
+      catPortfolioYield.textContent = formatUsdFull(summary.hourlyYield);
+    }
   }
 }
 
@@ -1078,7 +1013,6 @@ let detailChartMode = 'line';
 let detailStatsExpanded = false;
 let detailActiveSubTab = 'summary';
 let detailHoverCoord = null;
-const watchlistAssetIds = new Set();
 
 /**
  * Menghentikan animasi grafik yang sedang berjalan (saat menutup layar atau mengganti aset).
@@ -1124,6 +1058,10 @@ export function renderAssetPriceChart(asset) {
   });
 }
 
+export function getAssetDetailProfile(asset) {
+  return buildContinuousMarketProfile(asset);
+}
+
 /**
  * Merender informasi layar detail aset yang dipilih beserta grafik Canvas 2D.
  */
@@ -1132,10 +1070,12 @@ export function renderAssetDetailScreen() {
   const asset = getAssetById(state.selectedAssetId);
   if (!asset) return;
 
+  const profile = getAssetDetailProfile(asset);
   const currentPrice = getCurrentAssetPrice(asset.id);
   const fullHistory = getSafeHistoryPoints(asset);
   const viewPoints = sliceTimeframePoints(fullHistory, detailTimeframe);
   const stats = computeSessionStats(viewPoints, fullHistory, asset);
+  const market24Metrics = computeContinuousMarketMetrics(asset, stats);
   const changePct = getAssetChangePercent(asset.id);
   const holding = state.holdings[asset.id];
   const units = holding && Number.isFinite(Number(holding.units)) ? Number(holding.units) : 0;
@@ -1146,14 +1086,7 @@ export function renderAssetDetailScreen() {
   const unrealizedValue = units > 0 ? marketValue - totalCost : 0;
   const rawPct = totalCost > 0 ? (unrealizedValue / totalCost) * 100 : 0;
   const unrealizedPct = Number.isFinite(rawPct) ? rawPct : 0;
-  const assetHourlyYield =
-    asset.yieldRate > 0 && units > 0 ? marketValue * asset.yieldRate : 0;
-  const isStarred = watchlistAssetIds.has(asset.id);
-
-  if (detailWatchlistBtn) {
-    detailWatchlistBtn.classList.toggle('is-starred', isStarred);
-    detailWatchlistBtn.setAttribute('aria-pressed', String(isStarred));
-  }
+  const assetHourlyYield = calculateAssetHourlyYield(asset, units, currentPrice);
 
   if (detailAssetAvatar && detailAssetAvatar.dataset.assetId !== asset.id) {
     detailAssetAvatar.dataset.assetId = asset.id;
@@ -1170,9 +1103,11 @@ export function renderAssetDetailScreen() {
     }
   }
 
-  if (detailAssetSymbol) detailAssetSymbol.textContent = asset.symbol || asset.name;
-  if (detailAssetName) detailAssetName.textContent = asset.name;
+  if (detailAssetSymbol) detailAssetSymbol.textContent = profile.displaySymbol;
+  if (detailAssetName) detailAssetName.textContent = profile.displaySubtitle;
   if (detailAssetCategory) detailAssetCategory.textContent = asset.category;
+  if (detailSessionTag) detailSessionTag.hidden = !profile.showSessionTag;
+  if (detailMetaStrip) detailMetaStrip.hidden = !profile.showMetaStrip;
 
   if (detailMarketPriceHero) {
     const prevAssetId = detailMarketPriceHero.dataset.assetId;
@@ -1218,25 +1153,55 @@ export function renderAssetDetailScreen() {
     detailLastUpdate.textContent = 'Pembaruan ' + formatTimeHHMM(latestPoint ? latestPoint.ts : Date.now());
   }
 
-  if (detailStatsToggle && detailStatsExtra) {
+  const volLabel = market24Metrics.volatilityLabel;
+
+  if (detailStatsToggle) {
     detailStatsToggle.setAttribute('aria-expanded', String(detailStatsExpanded));
-    detailStatsExtra.hidden = !detailStatsExpanded;
+    detailStatsToggle.classList.toggle(
+      'detail-stats-drawer__toggle--grid',
+      profile.isContinuousMarket && detailStatsExpanded
+    );
   }
+  if (profile.isContinuousMarket) {
+    if (detailStatsSummary) detailStatsSummary.hidden = detailStatsExpanded;
+    if (detailStatsGrid24) detailStatsGrid24.hidden = !detailStatsExpanded;
+    if (detailStatsExtra) detailStatsExtra.hidden = true;
+    if (detailStatOpenWrap) detailStatOpenWrap.hidden = true;
+  } else {
+    if (detailStatsSummary) detailStatsSummary.hidden = false;
+    if (detailStatsGrid24) detailStatsGrid24.hidden = true;
+    if (detailStatsExtra) detailStatsExtra.hidden = !detailStatsExpanded;
+    if (detailStatOpenWrap) detailStatOpenWrap.hidden = false;
+  }
+
   if (detailStatOpen) detailStatOpen.textContent = formatTilePrice(stats.open);
-  if (detailStatHigh) detailStatHigh.textContent = formatTilePrice(stats.high);
-  if (detailStatLow) detailStatLow.textContent = formatTilePrice(stats.low);
+  if (detailStatHigh) {
+    detailStatHigh.textContent = formatTilePrice(
+      profile.isContinuousMarket ? market24Metrics.high24h : stats.high
+    );
+  }
+  if (detailStatLow) {
+    detailStatLow.textContent = formatTilePrice(
+      profile.isContinuousMarket ? market24Metrics.low24h : stats.low
+    );
+  }
+  if (detailStat24High) detailStat24High.textContent = formatTilePrice(market24Metrics.high24h);
+  if (detailStat24Low) detailStat24Low.textContent = formatTilePrice(market24Metrics.low24h);
+  if (detailStat24Vol) detailStat24Vol.textContent = volLabel;
+  if (detailStat24ExtraLabel) detailStat24ExtraLabel.textContent = market24Metrics.extraStatLabel;
+  if (detailStat24ExtraVal) {
+    detailStat24ExtraVal.textContent = formatTilePrice(market24Metrics.extraStatValue);
+  }
+
   if (detailStatSessionHigh) detailStatSessionHigh.textContent = formatTilePrice(stats.sessionHigh);
   if (detailStatSessionLow) detailStatSessionLow.textContent = formatTilePrice(stats.sessionLow);
+  if (detailStatDrawerYieldItem) detailStatDrawerYieldItem.hidden = !profile.hasDividends;
   if (detailStatYieldRate) {
     const yieldPct = asset.yieldRate * 100;
     detailStatYieldRate.textContent =
       yieldPct.toFixed(CONFIG.CURRENCY_DECIMALS).replace('.', ',') + '%';
   }
-  if (detailStatVolatility) {
-    const volPct = asset.volatility * 100;
-    detailStatVolatility.textContent =
-      volPct.toFixed(CONFIG.CURRENCY_DECIMALS).replace('.', ',') + '%';
-  }
+  if (detailStatVolatility) detailStatVolatility.textContent = volLabel;
 
   detailTimeframeBtns.forEach(function (btn) {
     const active = btn.getAttribute('data-timeframe') === detailTimeframe;
@@ -1321,11 +1286,14 @@ export function renderAssetDetailScreen() {
 
   if (detailStatTabCategory) detailStatTabCategory.textContent = asset.category;
   if (detailStatTabSymbol) detailStatTabSymbol.textContent = asset.symbol || asset.name;
+  if (detailStatTabUnit) detailStatTabUnit.textContent = asset.unitLabel;
+  if (detailStatInitialLabel) detailStatInitialLabel.textContent = profile.initialPriceLabel;
   if (detailStatTabInitial) detailStatTabInitial.textContent = formatUsdFull(asset.initialPrice);
   if (detailStatTabVolatility) {
-    const volPctTab = asset.volatility * 100;
-    detailStatTabVolatility.textContent =
-      volPctTab.toFixed(CONFIG.CURRENCY_DECIMALS).replace('.', ',') + '%';
+    detailStatTabVolatility.textContent = volLabel;
+  }
+  if (detailStatYieldRow) {
+    detailStatYieldRow.hidden = !profile.hasDividends;
   }
   if (detailStatTabYield) {
     const yieldPctTab = asset.yieldRate * 100;
@@ -1333,13 +1301,7 @@ export function renderAssetDetailScreen() {
       yieldPctTab.toFixed(CONFIG.CURRENCY_DECIMALS).replace('.', ',') + '%/jam';
   }
 
-  // Status chip jumlah [1] [10] [100] [Maks] & tombol Beli / Jual
-  detailQtyChips.forEach(function (chip) {
-    const active = chip.getAttribute('data-trade-qty') === state.selectedQtyMode;
-    chip.classList.toggle('qty-chip--active', active);
-    chip.setAttribute('aria-pressed', String(active));
-  });
-
+  // Status tombol Beli sesuai kecukupan saldo saat ini
   const trade = resolveTradeQuantities(currentPrice, units);
   const estBuyCost = trade.buyQty * currentPrice;
   const canBuy =
@@ -1347,35 +1309,9 @@ export function renderAssetDetailScreen() {
     Number.isFinite(estBuyCost) &&
     estBuyCost > 0 &&
     state.balance >= estBuyCost;
-  const canSell = units > 0 && trade.sellQty >= 1 && trade.sellQty <= units;
 
   if (detailBuyBtn) {
     detailBuyBtn.disabled = !canBuy;
-  }
-  if (detailSellBtn) {
-    detailSellBtn.disabled = !canSell;
-  }
-  if (detailTradeNotice) {
-    if (!canBuy) {
-      detailTradeNotice.textContent = 'Saldo tidak cukup';
-      detailTradeNotice.classList.add('detail-trade-notice--error');
-    } else if (state.selectedQtyMode === 'max') {
-      detailTradeNotice.textContent =
-        'Maks: ' +
-        formatIntegerID(trade.buyQty) +
-        ' (' +
-        formatUsdCompact(estBuyCost) +
-        ')';
-      detailTradeNotice.classList.remove('detail-trade-notice--error');
-    } else {
-      detailTradeNotice.textContent =
-        formatIntegerID(trade.buyQty) +
-        ' ' +
-        asset.unitLabel +
-        ' \u00B7 ' +
-        formatUsdCompact(estBuyCost);
-      detailTradeNotice.classList.remove('detail-trade-notice--error');
-    }
   }
 
   renderAssetPriceChart(asset);
@@ -1589,7 +1525,7 @@ export function openAssetDetail(assetId) {
   if (!asset || !assetDetailScreen || !investingScreen) return;
   resetDetailChartState();
   detailHoverCoord = null;
-  detailStatsExpanded = false;
+  detailStatsExpanded = getAssetDetailProfile(asset).defaultStatsExpanded;
   detailActiveSubTab = 'summary';
   if (detailChartTooltip) detailChartTooltip.hidden = true;
   state.selectedAssetId = asset.id;
@@ -1752,31 +1688,6 @@ export function bindInvestingEvents() {
     });
   });
 
-  if (assetDetailBackBtn) {
-    assetDetailBackBtn.addEventListener('click', function () {
-      closeAssetDetail();
-    });
-  }
-
-  if (detailWatchlistBtn) {
-    detailWatchlistBtn.addEventListener('click', function () {
-      if (!state.selectedAssetId) return;
-      const asset = getAssetById(state.selectedAssetId);
-      if (watchlistAssetIds.has(state.selectedAssetId)) {
-        watchlistAssetIds.delete(state.selectedAssetId);
-        if (asset) {
-          showToast('Daftar Pantauan', asset.name + ' dihapus dari favorit');
-        }
-      } else {
-        watchlistAssetIds.add(state.selectedAssetId);
-        if (asset) {
-          showToast('Daftar Pantauan', asset.name + ' ditandai sebagai favorit');
-        }
-      }
-      renderAssetDetailScreen();
-    });
-  }
-
   if (detailStatsToggle) {
     detailStatsToggle.addEventListener('click', function () {
       detailStatsExpanded = !detailStatsExpanded;
@@ -1855,28 +1766,10 @@ export function bindInvestingEvents() {
     assetPriceCanvas.addEventListener('pointercancel', clearScrub);
   }
 
-  detailQtyChips.forEach(function (chip) {
-    chip.addEventListener('click', function () {
-      const mode = chip.getAttribute('data-trade-qty');
-      if (mode) {
-        state.selectedQtyMode = mode;
-        renderAssetDetailScreen();
-      }
-    });
-  });
-
   if (detailBuyBtn) {
     detailBuyBtn.addEventListener('click', function () {
       if (!detailBuyBtn.disabled && state.selectedAssetId) {
         buyAsset(state.selectedAssetId);
-      }
-    });
-  }
-
-  if (detailSellBtn) {
-    detailSellBtn.addEventListener('click', function () {
-      if (!detailSellBtn.disabled && state.selectedAssetId) {
-        sellAsset(state.selectedAssetId);
       }
     });
   }

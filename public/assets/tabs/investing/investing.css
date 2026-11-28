@@ -949,71 +949,6 @@
   background-color: var(--surface-white);
 }
 
-.detail-header {
-  flex-shrink: 0;
-  width: 100%;
-  min-height: 46px;
-  padding: calc(6px + env(safe-area-inset-top, 0px)) 12px 4px;
-  background-color: var(--surface-white);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.detail-header__spacer {
-  flex: 1;
-}
-
-.detail-back-btn,
-.detail-star-btn {
-  appearance: none;
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  border: none;
-  background: transparent;
-  color: #0F172A;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  touch-action: manipulation;
-  transition: background-color 140ms ease, transform 120ms ease, color 140ms ease;
-}
-
-.detail-back-btn:hover,
-.detail-star-btn:hover {
-  background-color: #F1F5F9;
-}
-
-.detail-back-btn:active,
-.detail-star-btn:active {
-  transform: scale(0.94);
-}
-
-.detail-back-btn:focus-visible,
-.detail-star-btn:focus-visible {
-  outline: 2px solid #1D63ED;
-  outline-offset: 1px;
-}
-
-.detail-back-btn svg,
-.detail-star-btn svg {
-  width: 22px;
-  height: 22px;
-}
-
-.detail-star-btn {
-  color: #1D63ED;
-  --star-fill: none;
-}
-
-.detail-star-btn.is-starred {
-  --star-fill: #1D63ED;
-}
-
 .detail-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -1022,7 +957,7 @@
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   background-color: var(--surface-white);
-  padding: 2px 16px 14px;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 16px calc(18px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1198,7 +1133,16 @@
   flex-shrink: 0;
 }
 
-/* Kartu Statistik Lipat Buka / Tertinggi / Terendah */
+.detail-meta-strip[hidden],
+.detail-hero__session-tag[hidden],
+.detail-stats-drawer__summary[hidden],
+.detail-stats-drawer__grid24[hidden],
+.detail-stats-list__row[hidden],
+#detail-stat-open-wrap[hidden] {
+  display: none;
+}
+
+/* Kartu Statistik Lipat Buka / Tertinggi / Terendah & Grid 2x2 Kripto/Forex */
 .detail-stats-drawer {
   background-color: #F3F5F8;
   border-radius: 12px;
@@ -1209,16 +1153,21 @@
   appearance: none;
   width: 100%;
   min-height: 44px;
-  padding: 9px 12px;
+  padding: 10px 12px;
   border: none;
   background: transparent;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   cursor: pointer;
   touch-action: manipulation;
   text-align: left;
+}
+
+.detail-stats-drawer__toggle--grid {
+  align-items: flex-start;
+  padding: 12px;
 }
 
 .detail-stats-drawer__toggle:focus-visible {
@@ -1242,6 +1191,14 @@
 .detail-stats-drawer__summary strong {
   color: #0F172A;
   font-weight: 700;
+}
+
+.detail-stats-drawer__grid24 {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
 }
 
 .detail-stats-drawer__chevron {
@@ -1280,6 +1237,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+  min-width: 0;
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
@@ -1287,11 +1245,14 @@
 .detail-stats-drawer__k {
   color: #64748B;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .detail-stats-drawer__v {
   color: #0F172A;
   font-weight: 700;
+  white-space: nowrap;
+  text-align: right;
 }
 
 /* Bilah Pemilih Rentang Waktu & Tipe Grafik */
@@ -1414,7 +1375,6 @@
   align-items: center;
   gap: 18px;
   border-bottom: 1px solid #E2E8F0;
-  margin-top: 2px;
 }
 
 .detail-subtab {
@@ -1486,74 +1446,11 @@
   text-align: right;
 }
 
-/* Bilah Aksi Perdagangan Bawah (Menempel Bawah ala Referensi) */
-.detail-trade-dock {
-  flex-shrink: 0;
-  width: 100%;
-  padding: 7px 14px calc(8px + env(safe-area-inset-bottom, 0px));
-  background-color: var(--surface-white);
-  border-top: 1px solid #E2E8F0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.detail-trade-dock__top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.detail-qty-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 5px;
-  flex: 1;
-  max-width: 210px;
-}
-
-.qty-chip {
-  appearance: none;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  height: 28px;
-  padding: 0 4px;
-  background-color: #F8FAFC;
-  color: #334155;
-  font-size: 11.5px;
-  font-weight: 700;
-  cursor: pointer;
-  touch-action: manipulation;
-  font-variant-numeric: tabular-nums;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
-}
-
-.qty-chip--active {
-  background-color: #EFF6FF;
-  border-color: #1D63ED;
-  color: #1D63ED;
-}
-
-.detail-trade-notice {
-  font-size: 11px;
-  font-weight: 700;
-  color: #475569;
-  text-align: right;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-variant-numeric: tabular-nums;
-}
-
-.detail-trade-notice--error {
-  color: var(--negative-text);
-}
-
+/* Tombol Beli di antara Grafik dan Sub-Tab Ringkasan / Kepemilikan / Statistik */
 .detail-trade-actions {
   display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 8px;
+  grid-template-columns: 1fr;
+  width: 100%;
 }
 
 .trade-btn {
@@ -1572,19 +1469,6 @@
   transform: scale(0.98);
 }
 
-.trade-btn--sell {
-  background-color: #FFF1F2;
-  border: 1px solid #FECDD3;
-  color: #BE123C;
-}
-
-.trade-btn--sell:disabled {
-  border-color: #E2E8F0;
-  background-color: #F8FAFC;
-  color: #94A3B8;
-  cursor: not-allowed;
-}
-
 .trade-btn--buy {
   background-color: #2B70F8;
   border: none;
@@ -1601,6 +1485,49 @@
   color: #64748B;
   box-shadow: none;
   cursor: not-allowed;
+}
+
+@media (max-width: 360px) {
+  .detail-body {
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 12px calc(16px + env(safe-area-inset-bottom, 0px));
+    gap: 8px;
+  }
+
+  .detail-chart-card {
+    width: calc(100% + 24px);
+    margin: 0 -12px;
+  }
+
+  .detail-hero__symbol {
+    font-size: 16px;
+  }
+
+  .detail-price-box__current {
+    font-size: 17px;
+  }
+
+  .detail-stats-drawer__summary {
+    font-size: 10px;
+    gap: 6px;
+  }
+
+  .detail-stats-drawer__grid24 {
+    gap: 6px 10px;
+  }
+
+  .timeframe-btn {
+    padding: 0 3px;
+    font-size: 10.5px;
+  }
+
+  .timeframe-btn:last-child {
+    flex: 1.35;
+  }
+
+  .chart-mode-btn {
+    width: 30px;
+    height: 28px;
+  }
 }
 
 @media (max-height: 680px) {

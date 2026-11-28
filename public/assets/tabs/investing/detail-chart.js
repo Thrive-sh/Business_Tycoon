@@ -4,7 +4,7 @@
    ========================================================================== */
 
 import { CONFIG } from '../../core/config.js';
-import { hasDOM, root } from '../../utils/dom.js';
+import { root } from '../../utils/dom.js';
 import {
   formatUsdCompact,
   formatUsdFull,
@@ -196,11 +196,6 @@ export function formatChartAxisPrice(value, span) {
   return formatUsdCompact(safe);
 }
 
-function easeOutCubic(t) {
-  const clamped = Math.max(0, Math.min(1, t));
-  return 1 - Math.pow(1 - clamped, CONFIG.CHART_EASE_POWER);
-}
-
 function computePriceBounds(priceValues) {
   let minPrice = priceValues[0];
   let maxPrice = priceValues[0];
@@ -306,15 +301,13 @@ function drawChartFrame(ctx, cssWidth, cssHeight, dpr, frame) {
     ctx.stroke();
   }
 
-  const clipRight = typeof frame.clipRight === 'number' ? frame.clipRight : plotRight;
-
-  // Klip area plot agar sapuan pembukaan dan pergeseran kiri tetap bersih
+  // Klip area plot agar penggambaran kurva dan lilin tetap bersih di dalam bingkai
   ctx.save();
   ctx.beginPath();
   ctx.rect(
     plotLeft,
     plotTop - CONFIG.CHART_CLIP_PAD_PX,
-    Math.max(1, clipRight - plotLeft),
+    Math.max(1, plotRight - plotLeft),
     plotH + CONFIG.CHART_CLIP_PAD_PX + CONFIG.CHART_CLIP_PAD_PX
   );
   ctx.clip();
@@ -353,10 +346,8 @@ function drawChartFrame(ctx, cssWidth, cssHeight, dpr, frame) {
       });
     };
 
-    const fillAlpha = typeof frame.fillAlpha === 'number' ? frame.fillAlpha : 1;
     const lastCoord = coords[coords.length - 1];
     ctx.save();
-    ctx.globalAlpha = fillAlpha;
     ctx.beginPath();
     traceSpline();
     ctx.lineTo(lastCoord.x, plotBottom);
@@ -407,26 +398,8 @@ function drawChartFrame(ctx, cssWidth, cssHeight, dpr, frame) {
     badgeCenterY
   );
 
-  // Titik & halo biru di ujung kanan kurva (mode garis)
+  // Titik & halo biru statis di ujung kanan kurva (mode garis)
   if (frame.chartMode !== 'candle') {
-    if (typeof frame.pulseProgress === 'number' && frame.pulseProgress > 0 && frame.pulseProgress < 1) {
-      const pulseEase = easeOutCubic(frame.pulseProgress);
-      const pulseRadius =
-        CONFIG.CHART_DOT_OUTER_RADIUS +
-        (CONFIG.CHART_PULSE_MAX_RADIUS - CONFIG.CHART_DOT_OUTER_RADIUS) * pulseEase;
-      const pulseAlpha = CONFIG.CHART_PULSE_START_ALPHA * (1 - frame.pulseProgress);
-      ctx.beginPath();
-      ctx.arc(dotCoord.x, dotCoord.y, pulseRadius, 0, Math.PI * CONFIG.FULL_CIRCLE_TURNS);
-      ctx.strokeStyle =
-        'rgba(' +
-        CONFIG.CHART_PULSE_COLOR_FLAT +
-        ', ' +
-        pulseAlpha.toFixed(CONFIG.CHART_EASE_POWER) +
-        ')';
-      ctx.lineWidth = CONFIG.CHART_PULSE_STROKE_WIDTH;
-      ctx.stroke();
-    }
-
     ctx.beginPath();
     ctx.arc(dotCoord.x, dotCoord.y, CONFIG.CHART_DOT_OUTER_RADIUS, 0, Math.PI * CONFIG.FULL_CIRCLE_TURNS);
     ctx.fillStyle = 'rgba(' + CONFIG.CHART_PULSE_COLOR_FLAT + ', ' + CONFIG.CHART_HALO_ALPHA + ')';
@@ -487,39 +460,20 @@ function drawChartFrame(ctx, cssWidth, cssHeight, dpr, frame) {
   ctx.fillText(lastLabelX, plotRight, xLabelY);
 }
 
-let chartAnimRafId = null;
-const chartAnimState = {
-  assetId: null,
-  timeframe: null,
-  chartMode: null,
-  lastTs: null,
-  firstTs: null,
-  lastPrice: null,
-  lastWidth: 0,
-  renderedPrices: null,
-  renderedMinPrice: null,
-  renderedMaxPrice: null,
-  direction: 'flat',
+const chartPlotState = {
   latestPlotMeta: null
 };
 
 export function cancelDetailChartAnimation() {
-  if (chartAnimRafId !== null && typeof root.cancelAnimationFrame === 'function') {
-    root.cancelAnimationFrame(chartAnimRafId);
-  }
-  chartAnimRafId = null;
+  // Tidak ada animasi grafik aktif (grafik dirender statis secara instan)
 }
 
 export function resetDetailChartState() {
-  cancelDetailChartAnimation();
-  chartAnimState.assetId = null;
-  chartAnimState.timeframe = null;
-  chartAnimState.chartMode = null;
-  chartAnimState.latestPlotMeta = null;
+  chartPlotState.latestPlotMeta = null;
 }
 
 export function getDetailChartScrubPoint(clientX) {
-  const meta = chartAnimState.latestPlotMeta;
+  const meta = chartPlotState.latestPlotMeta;
   if (!meta || !Array.isArray(meta.coords) || meta.coords.length === 0) return null;
   const relX = clientX - meta.rectLeft;
   const clampedX = Math.max(meta.plotLeft, Math.min(meta.plotRight, relX));
@@ -540,7 +494,6 @@ export function renderDetailPriceChart(canvas, asset, rawPoints, options) {
   const timeframe = opts.timeframe || CONFIG.CHART_DEFAULT_TIMEFRAME;
   const chartMode = opts.chartMode || 'line';
   const hoverCoord = opts.hoverCoord || null;
-  const selectedAssetGetter = opts.getSelectedAssetId;
 
   const rect = canvas.getBoundingClientRect();
   const cssWidth = rect && rect.width > 0 ? rect.width : CONFIG.CHART_FALLBACK_WIDTH_PX;
@@ -602,34 +555,17 @@ export function renderDetailPriceChart(canvas, asset, rawPoints, options) {
   const lastTs = points[points.length - 1].ts;
   const latestPrice = rawPrices[rawPrices.length - 1];
 
-  const isSameContext =
-    chartAnimState.assetId === asset.id &&
-    chartAnimState.timeframe === timeframe &&
-    chartAnimState.chartMode === chartMode;
-  const hasNewTick =
-    isSameContext &&
-    (lastTs !== chartAnimState.lastTs || latestPrice !== chartAnimState.lastPrice);
-  const isResized = isSameContext && chartAnimState.lastWidth !== cssWidth;
+  const safeSpan =
+    targetBounds.scaleMax - targetBounds.scaleMin > 0
+      ? targetBounds.scaleMax - targetBounds.scaleMin
+      : 1;
+  const steadyCoords = smoothedPrices.map(function (val, idx) {
+    const x = plotLeft + (idx / (smoothedPrices.length - 1)) * plotW;
+    const y = plotBottom - ((val - targetBounds.scaleMin) / safeSpan) * plotH;
+    return { x: x, y: y };
+  });
 
-  if (isSameContext && !hasNewTick && !isResized && !hoverCoord && chartAnimRafId !== null) {
-    return;
-  }
-
-  function buildRestingCoords(priceValues, minScale, maxScale) {
-    const safeSpan = maxScale - minScale > 0 ? maxScale - minScale : 1;
-    return priceValues.map(function (val, idx) {
-      const x = plotLeft + (idx / (priceValues.length - 1)) * plotW;
-      const y = plotBottom - ((val - minScale) / safeSpan) * plotH;
-      return { x: x, y: y };
-    });
-  }
-
-  const steadyCoords = buildRestingCoords(
-    smoothedPrices,
-    targetBounds.scaleMin,
-    targetBounds.scaleMax
-  );
-  chartAnimState.latestPlotMeta = {
+  chartPlotState.latestPlotMeta = {
     rectLeft: rect ? rect.left : 0,
     plotLeft: plotLeft,
     plotRight: plotRight,
@@ -637,204 +573,17 @@ export function renderDetailPriceChart(canvas, asset, rawPoints, options) {
     points: points
   };
 
-  const prefersReducedMotion =
-    typeof root.matchMedia === 'function' &&
-    root.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const canAnimate =
-    hasDOM &&
-    typeof root.requestAnimationFrame === 'function' &&
-    !prefersReducedMotion &&
-    !hoverCoord;
-
-  if (!canAnimate || (isSameContext && !hasNewTick)) {
-    cancelDetailChartAnimation();
-    chartAnimState.assetId = asset.id;
-    chartAnimState.timeframe = timeframe;
-    chartAnimState.chartMode = chartMode;
-    chartAnimState.lastTs = lastTs;
-    chartAnimState.firstTs = firstTs;
-    chartAnimState.lastPrice = latestPrice;
-    chartAnimState.lastWidth = cssWidth;
-    chartAnimState.renderedPrices = smoothedPrices.slice();
-    chartAnimState.renderedMinPrice = targetBounds.scaleMin;
-    chartAnimState.renderedMaxPrice = targetBounds.scaleMax;
-
-    drawChartFrame(ctx, cssWidth, cssHeight, dpr, {
-      chartMode: chartMode,
-      candles: candles,
-      coords: steadyCoords,
-      dotCoord: steadyCoords[steadyCoords.length - 1],
-      scaleMin: targetBounds.scaleMin,
-      scaleMax: targetBounds.scaleMax,
-      latestPrice: latestPrice,
-      firstTs: firstTs,
-      midTs: midTs,
-      lastTs: lastTs,
-      hoverCoord: hoverCoord,
-      pulseProgress: null
-    });
-    return;
-  }
-
-  cancelDetailChartAnimation();
-
-  if (!isSameContext || chartMode === 'candle') {
-    chartAnimState.assetId = asset.id;
-    chartAnimState.timeframe = timeframe;
-    chartAnimState.chartMode = chartMode;
-    chartAnimState.lastTs = lastTs;
-    chartAnimState.firstTs = firstTs;
-    chartAnimState.lastPrice = latestPrice;
-    chartAnimState.lastWidth = cssWidth;
-    chartAnimState.renderedPrices = smoothedPrices.slice();
-    chartAnimState.renderedMinPrice = targetBounds.scaleMin;
-    chartAnimState.renderedMaxPrice = targetBounds.scaleMax;
-
-    const midY = (plotTop + plotBottom) / CONFIG.CHART_MID_DIVISOR;
-    const revealStart =
-      root.performance && typeof root.performance.now === 'function'
-        ? root.performance.now()
-        : Date.now();
-    const totalRevealMs = CONFIG.CHART_REVEAL_DURATION_MS + CONFIG.CHART_PULSE_DURATION_MS;
-
-    const stepReveal = function (nowTs) {
-      if (typeof selectedAssetGetter === 'function' && selectedAssetGetter() !== asset.id) {
-        chartAnimRafId = null;
-        return;
-      }
-      const nowVal = typeof nowTs === 'number' ? nowTs : Date.now();
-      const elapsed = Math.max(0, nowVal - revealStart);
-      const progress = Math.min(1, elapsed / CONFIG.CHART_REVEAL_DURATION_MS);
-      const ease = easeOutCubic(progress);
-      const clipX = plotLeft + ease * plotW;
-      const slideOffsetX = (1 - ease) * CONFIG.CHART_REVEAL_SLIDE_PX;
-
-      const frameCoords = steadyCoords.map(function (pt) {
-        return {
-          x: pt.x + slideOffsetX,
-          y: midY + (pt.y - midY) * ease
-        };
-      });
-
-      const normIdx = ((clipX - plotLeft) / plotW) * (frameCoords.length - 1);
-      const idxLow = Math.max(0, Math.min(frameCoords.length - 1, Math.floor(normIdx)));
-      const idxHigh = Math.min(frameCoords.length - 1, idxLow + 1);
-      const frac = normIdx - idxLow;
-      const penX =
-        progress >= 1
-          ? frameCoords[frameCoords.length - 1].x
-          : Math.min(plotRight, clipX + slideOffsetX);
-      const penY =
-        frameCoords[idxLow].y + (frameCoords[idxHigh].y - frameCoords[idxLow].y) * frac;
-
-      let pulseProgress = null;
-      if (elapsed >= CONFIG.CHART_REVEAL_DURATION_MS) {
-        const pulseElapsed = elapsed - CONFIG.CHART_REVEAL_DURATION_MS;
-        pulseProgress = Math.min(1, pulseElapsed / CONFIG.CHART_PULSE_DURATION_MS);
-      }
-
-      drawChartFrame(ctx, cssWidth, cssHeight, dpr, {
-        chartMode: chartMode,
-        candles: candles,
-        coords: frameCoords,
-        dotCoord: { x: penX, y: penY },
-        clipRight: progress >= 1 ? plotRight : clipX,
-        fillAlpha: ease,
-        scaleMin: targetBounds.scaleMin,
-        scaleMax: targetBounds.scaleMax,
-        latestPrice: latestPrice,
-        firstTs: firstTs,
-        midTs: midTs,
-        lastTs: lastTs,
-        pulseProgress: pulseProgress !== null && pulseProgress < 1 ? pulseProgress : null
-      });
-
-      if (elapsed < totalRevealMs) {
-        chartAnimRafId = root.requestAnimationFrame(stepReveal);
-      } else {
-        chartAnimRafId = null;
-      }
-    };
-
-    chartAnimRafId = root.requestAnimationFrame(stepReveal);
-    return;
-  }
-
-  // Pembaruan tick real-time pada kurva halus
-  const prevPrices =
-    Array.isArray(chartAnimState.renderedPrices) && chartAnimState.renderedPrices.length > 1
-      ? chartAnimState.renderedPrices.slice()
-      : smoothedPrices.slice();
-  const prevMin = Number.isFinite(chartAnimState.renderedMinPrice)
-    ? chartAnimState.renderedMinPrice
-    : targetBounds.scaleMin;
-  const prevMax = Number.isFinite(chartAnimState.renderedMaxPrice)
-    ? chartAnimState.renderedMaxPrice
-    : targetBounds.scaleMax;
-
-  chartAnimState.lastTs = lastTs;
-  chartAnimState.firstTs = firstTs;
-  chartAnimState.lastPrice = latestPrice;
-  chartAnimState.lastWidth = cssWidth;
-
-  const animStart =
-    root.performance && typeof root.performance.now === 'function'
-      ? root.performance.now()
-      : Date.now();
-
-  const stepTick = function (nowTs) {
-    if (typeof selectedAssetGetter === 'function' && selectedAssetGetter() !== asset.id) {
-      chartAnimRafId = null;
-      return;
-    }
-    const nowVal = typeof nowTs === 'number' ? nowTs : Date.now();
-    const elapsed = Math.max(0, nowVal - animStart);
-    const morphProgress = Math.min(1, elapsed / CONFIG.CHART_ANIM_DURATION_MS);
-    const pulseProgress = Math.min(1, elapsed / CONFIG.CHART_PULSE_DURATION_MS);
-    const ease = easeOutCubic(morphProgress);
-
-    const curMin = prevMin + (targetBounds.scaleMin - prevMin) * ease;
-    const curMax = prevMax + (targetBounds.scaleMax - prevMax) * ease;
-    const curSpan = curMax - curMin > 0 ? curMax - curMin : 1;
-
-    const frameCoords = new Array(smoothedPrices.length);
-    const snapshotPrices = new Array(smoothedPrices.length);
-    for (let i = 0; i < smoothedPrices.length; i += 1) {
-      const fromVal = prevPrices[Math.min(i, prevPrices.length - 1)];
-      const interpVal = fromVal + (smoothedPrices[i] - fromVal) * ease;
-      snapshotPrices[i] = interpVal;
-      const x = plotLeft + (i / (smoothedPrices.length - 1)) * plotW;
-      const y = plotBottom - ((interpVal - curMin) / curSpan) * plotH;
-      frameCoords[i] = { x: x, y: y };
-    }
-
-    chartAnimState.renderedPrices = snapshotPrices;
-    chartAnimState.renderedMinPrice = curMin;
-    chartAnimState.renderedMaxPrice = curMax;
-
-    drawChartFrame(ctx, cssWidth, cssHeight, dpr, {
-      chartMode: chartMode,
-      candles: candles,
-      coords: frameCoords,
-      dotCoord: frameCoords[frameCoords.length - 1],
-      scaleMin: curMin,
-      scaleMax: curMax,
-      latestPrice: latestPrice,
-      firstTs: firstTs,
-      midTs: midTs,
-      lastTs: lastTs,
-      pulseProgress: pulseProgress < 1 ? pulseProgress : null
-    });
-
-    if (morphProgress < 1 || pulseProgress < 1) {
-      chartAnimRafId = root.requestAnimationFrame(stepTick);
-    } else {
-      chartAnimState.renderedPrices = smoothedPrices.slice();
-      chartAnimState.renderedMinPrice = targetBounds.scaleMin;
-      chartAnimState.renderedMaxPrice = targetBounds.scaleMax;
-      chartAnimRafId = null;
-    }
-  };
-
-  chartAnimRafId = root.requestAnimationFrame(stepTick);
+  drawChartFrame(ctx, cssWidth, cssHeight, dpr, {
+    chartMode: chartMode,
+    candles: candles,
+    coords: steadyCoords,
+    dotCoord: steadyCoords[steadyCoords.length - 1],
+    scaleMin: targetBounds.scaleMin,
+    scaleMax: targetBounds.scaleMax,
+    latestPrice: latestPrice,
+    firstTs: firstTs,
+    midTs: midTs,
+    lastTs: lastTs,
+    hoverCoord: hoverCoord
+  });
 }

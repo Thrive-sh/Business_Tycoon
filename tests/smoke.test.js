@@ -38,7 +38,7 @@ const mockStorage = createMockStorage();
 globalThis.localStorage = mockStorage;
 
 // Impor dinamis SETELAH mock localStorage terpasang (impor statis dievaluasi lebih dulu)
-const [configMod, assetsMod, formatMod, firebaseMod, stateMod, earningsMod, detailChartMod, investingMod, profileMod, mainMod] =
+const [configMod, assetsMod, formatMod, firebaseMod, stateMod, earningsMod, cryptoForexMod, detailChartMod, investingMod, profileMod, mainMod] =
   await Promise.all([
     import('../public/assets/core/config.js'),
     import('../public/assets/data/assets.js'),
@@ -46,6 +46,7 @@ const [configMod, assetsMod, formatMod, firebaseMod, stateMod, earningsMod, deta
     import('../public/assets/core/firebase.js'),
     import('../public/assets/core/state.js'),
     import('../public/assets/tabs/earnings/earnings.js'),
+    import('../public/assets/tabs/investing/crypto-forex.js'),
     import('../public/assets/tabs/investing/detail-chart.js'),
     import('../public/assets/tabs/investing/investing.js'),
     import('../public/assets/tabs/profile/profile.js'),
@@ -59,6 +60,7 @@ const game = Object.assign(
   firebaseMod,
   stateMod,
   earningsMod,
+  cryptoForexMod,
   detailChartMod,
   investingMod,
   profileMod,
@@ -456,5 +458,169 @@ test('detail-chart: sliceTimeframePoints, smoothPriceSeries, computeSessionStats
   assert.equal(segments.length, coords.length - 1);
   assert.equal(segments[segments.length - 1].endX, 160);
   assert.equal(segments[segments.length - 1].endY, 40);
+
+  // Pastikan render grafik berjalan instan tanpa requestAnimationFrame
+  let rafCalls = 0;
+  const prevRaf = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = function () {
+    rafCalls += 1;
+    return 1;
+  };
+  try {
+    const noop = function () {};
+    const mockCtx = {
+      setTransform: noop,
+      clearRect: noop,
+      beginPath: noop,
+      moveTo: noop,
+      lineTo: noop,
+      quadraticCurveTo: noop,
+      bezierCurveTo: noop,
+      closePath: noop,
+      stroke: noop,
+      fill: noop,
+      fillRect: noop,
+      fillText: noop,
+      rect: noop,
+      clip: noop,
+      save: noop,
+      restore: noop,
+      setLineDash: noop,
+      arc: noop,
+      createLinearGradient: function () {
+        return { addColorStop: noop };
+      }
+    };
+    const mockCanvas = {
+      width: 0,
+      height: 0,
+      getContext: function () {
+        return mockCtx;
+      },
+      getBoundingClientRect: function () {
+        return { left: 0, width: 390, height: 248 };
+      }
+    };
+    game.renderDetailPriceChart(
+      mockCanvas,
+      { id: 'saham_apple', initialPrice: 150 },
+      samplePoints,
+      { timeframe: 'all', chartMode: 'line' }
+    );
+    assert.equal(rafCalls, 0);
+  } finally {
+    globalThis.requestAnimationFrame = prevRaf;
+  }
 });
+
+test('getAssetDetailProfile menyesuaikan Kripto & Forex tanpa dividen serta mempertahankan Saham', function () {
+  const btcProfile = game.getAssetDetailProfile({
+    id: 'kripto_bitcoin',
+    name: 'Bitcoin',
+    symbol: 'BTC',
+    category: 'Kripto',
+    yieldRate: 0
+  });
+  assert.equal(btcProfile.isContinuousMarket, true);
+  assert.equal(btcProfile.hasDividends, false);
+  assert.equal(btcProfile.showSessionTag, false);
+  assert.equal(btcProfile.showMetaStrip, false);
+  assert.equal(btcProfile.defaultStatsExpanded, true);
+  assert.equal(btcProfile.displaySymbol, 'BTC / USD');
+  assert.equal(btcProfile.displaySubtitle, 'Bitcoin');
+  assert.equal(btcProfile.extraStatLabel, 'Harga Dasar');
+
+  const forexProfile = game.getAssetDetailProfile({
+    id: 'forex_eur_usd',
+    name: 'EUR/USD',
+    symbol: 'EUR',
+    category: 'Forex',
+    yieldRate: 0
+  });
+  assert.equal(forexProfile.isContinuousMarket, true);
+  assert.equal(forexProfile.hasDividends, false);
+  assert.equal(forexProfile.showSessionTag, false);
+  assert.equal(forexProfile.showMetaStrip, false);
+  assert.equal(forexProfile.displaySymbol, 'EUR / USD');
+  assert.equal(forexProfile.displaySubtitle, 'Pasangan Mata Uang');
+  assert.equal(forexProfile.extraStatLabel, 'Rentang 24j');
+
+  const stockProfile = game.getAssetDetailProfile({
+    id: 'saham_nvidia',
+    name: 'Nvidia',
+    symbol: 'NVDA',
+    category: 'Saham',
+    yieldRate: 0.0003
+  });
+  assert.equal(stockProfile.isContinuousMarket, false);
+  assert.equal(stockProfile.hasDividends, true);
+  assert.equal(stockProfile.showSessionTag, true);
+  assert.equal(stockProfile.showMetaStrip, true);
+  assert.equal(stockProfile.defaultStatsExpanded, false);
+  assert.equal(stockProfile.displaySymbol, 'NVDA');
+});
+
+test('crypto-forex: memisahkan yield nol untuk Kripto & Forex vs dividen Saham serta pembaruan nilai real-time', function () {
+  // Kripto dan Forex selalu yield = 0 meskipun yieldRate positif disisipkan
+  assert.equal(game.isCryptoOrForexCategory('Kripto'), true);
+  assert.equal(game.isCryptoOrForexCategory('Forex'), true);
+  assert.equal(game.isCryptoOrForexCategory('Saham'), false);
+
+  assert.equal(
+    game.calculateAssetHourlyYield({ id: 'kripto_test', category: 'Kripto', yieldRate: 0.05 }, 10, 1000),
+    0
+  );
+  assert.equal(
+    game.calculateAssetHourlyYield({ id: 'forex_test', category: 'Forex', yieldRate: 0.02 }, 10, 1000),
+    0
+  );
+  assert.equal(
+    game.calculateAssetHourlyYield({ id: 'saham_test', category: 'Saham', yieldRate: 0.004 }, 3, 150000),
+    1800
+  );
+
+  // Metrik 24 jam khusus Kripto & Forex
+  const crypto24 = game.computeContinuousMarketMetrics(
+    { category: 'Kripto', initialPrice: 1600000000, volatility: 0.03 },
+    { sessionHigh: 1700000000, sessionLow: 1500000000 }
+  );
+  assert.equal(crypto24.extraStatLabel, 'Harga Dasar');
+  assert.equal(crypto24.extraStatValue, 1600000000);
+
+  const forex24 = game.computeContinuousMarketMetrics(
+    { category: 'Forex', initialPrice: 17500, volatility: 0.002 },
+    { sessionHigh: 17650, sessionLow: 17400 }
+  );
+  assert.equal(forex24.extraStatLabel, 'Rentang 24j');
+  assert.equal(forex24.extraStatValue, 250);
+
+  // Valuasi portofolio real-time: beli Bitcoin (Kripto) + EUR/USD (Forex), lalu ubah harga tick
+  mockStorage.clear();
+  game.resetAllData();
+  game.state.balance = 5000000000;
+  game.state.lastPrices.kripto_bitcoin = 1000000;
+  game.state.lastPrices.forex_eur_usd = 20000;
+  assert.equal(game.buyAsset('kripto_bitcoin', 2), true);
+  assert.equal(game.buyAsset('forex_eur_usd', 5), true);
+
+  // Yield total harus tetap 0 karena hanya memiliki Kripto & Forex
+  assert.equal(game.getTotalInvestmentHourlyYield(), 0);
+  const initialAlloc = game.getPortfolioAllocation();
+  assert.equal(initialAlloc.total, 2100000);
+  assert.equal(initialAlloc.byCategory.Kripto.hourlyYield, 0);
+  assert.equal(initialAlloc.byCategory.Kripto.hasDividends, false);
+  assert.equal(initialAlloc.byCategory.Forex.hourlyYield, 0);
+  assert.equal(initialAlloc.byCategory.Forex.hasDividends, false);
+
+  // Simulasikan perubahan harga pasar & verifikasi nilai portofolio langsung ikut berubah
+  game.runPriceTick();
+  const expectedTotal =
+    2 * game.state.lastPrices.kripto_bitcoin + 5 * game.state.lastPrices.forex_eur_usd;
+  const updatedAlloc = game.getPortfolioAllocation();
+  assert.equal(Math.round(updatedAlloc.total * 100), Math.round(expectedTotal * 100));
+  assert.equal(updatedAlloc.totalHourlyYield, 0);
+  assert.equal(game.getTotalInvestmentHourlyYield(), 0);
+});
+
+
 

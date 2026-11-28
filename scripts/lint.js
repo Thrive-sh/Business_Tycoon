@@ -92,6 +92,7 @@ const jsFiles = [
   'public/assets/components/milestones.js',
   'public/assets/components/preview.js',
   'public/assets/tabs/earnings/earnings.js',
+  'public/assets/tabs/investing/crypto-forex.js',
   'public/assets/tabs/investing/detail-chart.js',
   'public/assets/tabs/investing/investing.js',
   'public/assets/tabs/business/business.js',
